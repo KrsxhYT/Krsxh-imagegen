@@ -11,13 +11,17 @@ def imagegen(prompt: str) -> str:
     return f"https://img.hazex.workers.dev?prompt={prompt}&improve=true&format=potrait"
 
 
-def fetch_image(url: str):
-    """Download image bytes from URL."""
-    response = requests.get(url, stream=True)
+def fetch_image_no_redirect(url: str):
+    """Download final image bytes, even if server redirects multiple times."""
+    
+    session = requests.Session()
+    
+    # follow_redirects=False to stop auto redirect in browser
+    response = session.get(url, allow_redirects=True, stream=True)
 
     if response.status_code != 200:
         return None
-
+    
     return BytesIO(response.content)
 
 
@@ -26,42 +30,30 @@ def fetch_image(url: str):
 @app.get("/")
 async def home():
     return {
-        "message": "Direct Image Generator API",
-        "usage": "GET /gen?prompt=your_text",
-        "POST_usage": "POST /gen  { 'prompt': 'your_text' }",
+        "message": "Direct Image Generator API (No Redirect Version)",
+        "usage": "/gen?prompt=your_prompt",
         "developer": "@Krsxh"
     }
 
 
-# ------------ GET Route (Direct Image Response) ---------------- #
+# ------------ GET Route ---------------- #
 
 @app.get("/gen")
 async def generate_get(prompt: str | None = None):
 
     if not prompt or prompt.strip() == "":
-        return JSONResponse(
-            content={
-                "result": "failed",
-                "message": "Missing prompt!",
-                "usage": "/gen?prompt=a cute cat"
-            }
-        )
+        return {"result": "failed", "message": "Missing prompt!"}
 
     img_url = imagegen(prompt)
-    img_data = fetch_image(img_url)
+    img_data = fetch_image_no_redirect(img_url)
 
     if img_data is None:
-        return JSONResponse(
-            content={
-                "result": "failed",
-                "message": "Failed to load image!"
-            }
-        )
+        return {"result": "failed", "message": "Image fetch failed!"}
 
     return StreamingResponse(img_data, media_type="image/jpeg")
 
 
-# ------------ POST Route (Direct Image Response) ---------------- #
+# ------------ POST Route ---------------- #
 
 @app.post("/gen")
 async def generate_post(request: Request):
@@ -70,22 +62,12 @@ async def generate_post(request: Request):
     prompt = data.get("prompt")
 
     if not prompt or prompt.strip() == "":
-        return JSONResponse(
-            content={
-                "result": "failed",
-                "message": "Missing 'prompt' in JSON body!"
-            }
-        )
+        return {"result": "failed", "message": "Missing prompt!"}
 
     img_url = imagegen(prompt)
-    img_data = fetch_image(img_url)
+    img_data = fetch_image_no_redirect(img_url)
 
     if img_data is None:
-        return JSONResponse(
-            content={
-                "result": "failed",
-                "message": "Failed to load image!"
-            }
-        )
+        return {"result": "failed", "message": "Image fetch failed!"}
 
     return StreamingResponse(img_data, media_type="image/jpeg")
